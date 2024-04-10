@@ -1,0 +1,501 @@
+---
+title: 'Module 4: Regularization'
+author: "Sanchi Gupta, ALY6015 Intermediate Analytics"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+# Introduction
+
+Regularization techniques are essential tools in the realm of machine learning and statistics, enabling the development of models that generalize well to new data. These techniques effectively reduce overfitting by penalizing the magnitude of coefficients and, in some cases, driving them to zero to simplify the model. This report delves into the practical application of two popular regularization methods: Ridge and Lasso regression. Utilizing the ISLR library's College dataset, we explore how these techniques can be leveraged to predict the graduation rate (Grad.Rate) while discussing the impacts of various lambda values on model complexity and performance. The report further compares these regularization methods with a Stepwise regression model to determine the most effective approach for our predictive task.
+
+------------------------------------------------------------------------
+
+## Importing the data set and required libraries.
+
+-   **Importing libraries**
+
+```{r message=FALSE}
+library(ISLR)
+library(glmnet)
+library(Matrix)
+library(ggplot2)
+library(caret)
+library(knitr)
+library(kableExtra)
+
+```
+
+-   **Importing the dataset**
+
+```{r}
+data("College")
+```
+
+------------------------------------------------------------------------
+
+## 1. Split the data into a train and test set.
+
+```{r}
+set.seed(123)
+train_index <- createDataPartition(College$Grad.Rate, p=0.7, list = FALSE)
+train <- College[train_index,]
+test <- College[-train_index,]
+
+```
+
+------------------------------------------------------------------------
+
+# [Ridge Regression]{.underline}
+
+## 2. Use the *cv.glmnet* function to estimate the *lambda.min* and *lambda.1se* values. Compare and discuss the values.
+
+```{r}
+# Converting dataframe into Matrix
+train_x <- model.matrix(Grad.Rate~.,train)[,-1]
+test_x <- model.matrix(Grad.Rate~.,test)[,-1]
+
+# Scaling the data
+train_x_scaled <- scale(train_x)
+test_x_scaled <- scale(test_x)
+
+# Storing Grad.Rate in another Matrix
+train_y <- train$Grad.Rate
+test_y <- test$Grad.Rate
+
+# Performing cross validation
+set.seed(123)
+cv.ridge <- cv.glmnet(train_x_scaled, train_y, alpha = 0, nfolds = 10)
+# (Code Sorced from Canvas- Lab: Regularization)
+
+# Finding lambda.min
+ridge_lambda.min <- cv.ridge$lambda.min
+
+ridge_lambda.1se <- cv.ridge$lambda.1se
+
+cat("(Ridge Regression) Lambda min:", ridge_lambda.min, "\n")
+cat("(Ridge Regression) Lambda 1se:", ridge_lambda.1se, "\n")
+
+```
+
+**Interpretation of Lambda Values:**
+
+-   **Lambda min (3.126268)**: This value of lambda corresponds to the model that provides the lowest mean cross-validated error. This model is likely to use most of the available predictors to explain the variation in "Grad.Rate".
+
+-   **Lambda 1se (29.15568)**: This lambda value is chosen as the most regularized model within one standard error of the minimum cross-validated error. This leads to a simpler model that might perform better on unseen data by reducing the risk of overfitting.
+
+**Comparison:**
+
+The lambda.min model aims to capture as much information as possible from the predictors, which might make it more complex. In contrast, the lambda.1se model sacrifices some of this complexity to enhance its generalizability to new, unseen data. The choice between these two models depends on the specific application context. If the primary goal is predictive accuracy on a dataset similar to the training data and overfitting is not a major concern (possibly due to a large enough dataset or other model validation techniques in place), the lambda.min model might be preferred. However, if the model needs to generalize well to unseen data or if there's a preference for simpler models (due to interpretability concerns or to avoid overfitting), the lambda.1se model might be more appropriate.
+
+------------------------------------------------------------------------
+
+## 3. Plot the results from the *cv.glmnet* function and provide an interpretation. What does this plot tell us?
+
+```{r}
+# Plot the cv.glmnet object
+plot(cv.ridge)
+
+# title 
+mtext("Figure 1:Cross-Validated Ridge Regression", side = 3, line = 3, cex = 1.2)
+
+# note below the plot
+mtext("Note: The vertical lines represent lambda.min (in red) and lambda.1se (in blue) values.", side = 1, line = 4, cex = 0.8)
+
+
+# Add vertical lines for lambda.min and lambda.1se
+abline(v=log(cv.ridge$lambda.min), col="red", lwd=2, lty=2)
+abline(v=log(cv.ridge$lambda.1se), col="blue", lwd=2, lty=2)
+
+
+# (OpenAI, 2024)
+# Define y-coordinate for annotations
+y_coord <- max(cv.ridge$cvm) * 1.05
+
+# Add text annotations for lambda.min and lambda.1se at the top
+text(x=log(cv.ridge$lambda.min), y=y_coord, 
+     labels=paste("lambda.min =", round(cv.ridge$lambda.min, 4)), 
+     adj=c(0.5, 2), col="red") 
+
+text(x=log(cv.ridge$lambda.1se), y=y_coord, 
+     labels=paste("lambda.1se =", round(cv.ridge$lambda.1se, 4)), 
+     adj=c(0.5, 4), col="blue")  
+
+
+
+```
+
+**Interpretation for Figure 1: Cross-Validated Ridge Regression**
+
+In the above figure, each red dot represents the mean squared error for a specific value of lambda during the cross-validation process.
+
+-   The vertical bars extending from the dots represent the variability of the MSE across the different cross-validation folds.
+
+-   **Lambda.min =3.1263** corresponds to the most complex model among those considered that still prevents overfitting, according to the cross-validation results. It suggests that a moderate level of regularization is appropriate for this dataset.
+
+-   **Lambda.1se =29.1557** suggests a simpler model with potentially fewer predictor variables or reduced coefficients.
+
+------------------------------------------------------------------------
+
+## 4. Fit a Ridge regression model against the training set and report on the coefficients. Is there anything interesting?
+
+```{r}
+# Fitting ridge regression with lambda.min
+model.min <- glmnet(train_x_scaled, train_y, alpha = 0, lambda = ridge_lambda.min)
+coef(model.min)
+```
+
+```{r}
+# Fitting ridge regression with lambda.1se
+model.1se <- glmnet(train_x_scaled, train_y, alpha = 0, lambda = ridge_lambda.1se)
+coef(model.1se)
+```
+
+**Comparison:**
+
+-   Variables have positive coefficients, indicating a positive relationship with the graduation rate. Some have negative coefficients, suggesting a negative relationship with the graduation rate.
+
+-   The consistency of the intercept term across both models suggests that the baseline graduation rate is not sensitive to the level of regularization.
+
+-   The coefficients of lambda.1se are smaller in magnitude compared to the lambda.min model, which is expected since lambda.1se implies stronger regularization and therefore greater shrinkage of coefficients.
+
+**The significant change in the expenditure coefficient between the two models is an interesting finding and may warrant further investigation to understand the underlying dynamics between spending and graduation outcomes.**
+
+Notably, Expend has a negative coefficient (-1.084) for lambda.min, which is counter intuitive as higher spending per student is generally expected to correlate with better outcomes. Whereas Expend now has a positive coefficient (0.382), which is more aligned with expectations, suggesting that in the more regularized model, higher expenditure per student is associated with a slight increase in graduation rates.
+
+------------------------------------------------------------------------
+
+## 5. Determine the performance of the fit model against the training set by calculating the root mean square error (RMSE).
+
+```{r}
+# Making predictions on the training set for lambda.min
+pred_train_ridge_min <- predict(model.min, s = ridge_lambda.min , newx = train_x_scaled)
+
+# Calculating the square root of the mean squared error
+rmse_train_ridge_min <- sqrt(mean((train_y - pred_train_ridge_min)^2))
+
+
+# Making predictions on the training set for lambda.1se
+pred_train_ridge_1se <- predict(model.1se, s = ridge_lambda.1se , newx = train_x_scaled)
+
+# Calculating the square root of the mean squared error for lambda.1se
+rmse_train_ridge_1se <- sqrt(mean((train_y - pred_train_ridge_1se)^2))
+
+# Create a data frame with RMSE values
+ridge_rmse_values1 <- data.frame(
+  Model = c('Ridge - lambda.min', 'Ridge - lambda.1se'),
+  RMSE = c(rmse_train_ridge_min, rmse_train_ridge_1se)
+)
+
+# Use kable to create a nicely formatted table
+kable(ridge_rmse_values1, caption = "Table 1: Training Set RMSE for Ridge Regression Models") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+------------------------------------------------------------------------
+
+## 6. Determine the performance of the fit model against the test set by calculating the root mean square error (RMSE). Is your model overfit?
+
+```{r}
+# Making predictions on the test set
+pred_test_ridge_min <- predict(model.min, s = ridge_lambda.min , newx = test_x_scaled)
+
+# Calculating the square root of the mean squared error for lambda.min
+rmse_test_ridge_min <- sqrt(mean((test_y - pred_test_ridge_min)^2))
+
+
+# Making predictions on the test set for lambda.1se
+pred_test_ridge_1se <- predict(model.1se, s = ridge_lambda.1se , newx = test_x_scaled)
+
+# Calculating the square root of the mean squared error for lambda.1se
+rmse_test_ridge_1se <- sqrt(mean((test_y - pred_test_ridge_1se)^2))
+
+# Create a data frame with RMSE values
+ridge_rmse_values2 <- data.frame(
+  Model = c('Ridge - lambda.min', 'Ridge - lambda.1se'),
+  RMSE = c(rmse_test_ridge_min, rmse_test_ridge_1se)
+)
+
+# Use kable to create a nicely formatted table
+kable(ridge_rmse_values2, caption = "Table 2: Test Set RMSE for Ridge Regression Models") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+**Interpretation for Table 2:**
+
+The small gap between the training and test RMSEs for both models supports the conclusion that overfitting is minimal. The models appear to generalize well to unseen data, with the lambda.1se model showing particularly good generalization as its test RMSE is actually lower than the training RMSE. The difference in test RMSE between the two models is smaller than the difference in their training RMSEs, which might indicate that the extra regularization in the lambda.1se model helps to improve generalization, even if it doesn't lead to the lowest possible error on the test set.
+
+**Based on the RMSE values for both training and test sets, neither model appears to be overfitting significantly.** The Ridge regression model with lambda.min is performing better on the test set, as indicated by its lower RMSE value of 12.09748 compared to the RMSE of 12.89809 for the model with lambda.1se.
+
+------------------------------------------------------------------------
+
+# [Lasso]{.underline}
+
+## 7. Use the cv.glmnet function to estimate the *lambda.min* and *lambda.1se* values. Compare and discuss the values.
+
+```{r}
+# Performing cross validation
+set.seed(123)
+cv.lasso <- cv.glmnet(train_x_scaled, train_y, alpha = 1, nfolds = 10)
+# (Code Sorced from Canvas- Lab: Regularization)
+
+# Finding lambda.min
+lasso_lambda.min <- cv.lasso$lambda.min
+
+
+lasso_lambda.1se <- cv.lasso$lambda.1se
+
+
+cat("(Lasso Regression) Lambda min:", lasso_lambda.min, "\n")
+cat("(Lasso Regression) Lambda 1se:", lasso_lambda.1se, "\n")
+```
+
+**Interpretation of Lambda Values:**
+
+-   **Lambda.min (0.1707654):** This value of the regularization parameter is where the cross-validated mean squared error (MSE) is at its lowest. This model is potentially better predictive performance on the training data.
+
+-   **Lambda 1se** **(1.747837)**: This value is larger than lambda.min, meaning it imposes more regularization. This leads to a simpler model with fewer non-zero coefficients due to greater shrinkage.
+
+**Comparison:**
+
+The choice between these two values represents a trade-off between model complexity and generalization. lambda.min aims for the lowest possible error on the training set, potentially at the cost of complexity, while lambda.1se aims for a balance that might generalize better to new data, potentially at the cost of slightly increased error. (Goyal, 2017) The model using lambda.1se is typically more interpretable due to its simplicity, as it includes only the most significant predictors.
+
+In summary, lambda.min provides the best fit to the training data, while lambda.1se offers a more conservative fit that might perform better when predicting new, unseen data.
+
+------------------------------------------------------------------------
+
+## 8. Plot the results from the *cv.glmnet* function and provide an interpretation. What does this plot tell us?
+
+```{r}
+# Plotting the graph
+plot(cv.lasso)
+
+# title 
+mtext("Figure 2:Cross-Validated Lasso Regression", side = 3, line = 3, cex = 1.2)
+
+# note below the plot
+mtext("Note: The vertical lines represent lambda.min (in red) and lambda.1se (in blue) values.", side = 1, line = 4, cex = 0.8)
+
+# Add vertical lines for lambda.min and lambda.1se
+abline(v=log(cv.lasso$lambda.min), col="red", lwd=2, lty=2)
+abline(v=log(cv.lasso$lambda.1se), col="blue", lwd=2, lty=2)
+# (OpenAI, 2024)
+
+
+# Add text annotations for lambda.min and lambda.1se at the top
+text(x=log(cv.lasso$lambda.min), y=y_coord, 
+     labels=paste("lambda.min =", round(cv.lasso$lambda.min, 3)), 
+     adj=c(0.5, 2), col="red") 
+
+text(x=log(cv.lasso$lambda.1se), y=y_coord, 
+     labels=paste("lambda.1se =", round(cv.lasso$lambda.1se, 3)), 
+     adj=c(0.5, 4), col="blue")  
+
+
+```
+
+**Interpretation for Figure 2: Cross-Validated Lasso Regression**
+
+-   The graph shows that as regularization increases, the model complexity decreases and the MSE generally increases after hitting the minimum at lambda.min.
+
+-   lambda.min corresponds to the minimum MSE. It suggests the model that provides the best fit to the data.
+
+-   lambda.1se is where the MSE is within one standard error of the minimum MSE. It suggests a simpler model that potentially trades off a slight increase in MSE for increased model simplicity and potentially better generalizability.
+
+-   Numbers at the Top represent the count of non-zero coefficients in the Lasso model at each lambda value. As it increases, the number of non-zero coefficients decreases, indicating that more predictors are being shrunk towards zero, which simplifies the model.
+
+------------------------------------------------------------------------
+
+## 9. Fit a LASSO regression model against the training set and report on the coefficients. Do any coefficients reduce to zero? If so, which ones?
+
+```{r}
+# Fitting Lasso regression with lambda.min
+model.min <- glmnet(train_x_scaled, train_y, alpha = 1, lambda = lasso_lambda.min)
+coef(model.min)
+```
+
+```{r}
+# Fitting Lasso regression with lambda.1se
+model.1se <- glmnet(train_x_scaled, train_y, alpha = 1, lambda = lasso_lambda.1se)
+coef(model.1se)
+```
+
+[**Question:**]{.underline} **Do any coefficients reduce to zero? If so, which ones?**
+
+Answer: Several coefficients have been reduced to zero for both lambda.min and lambda.1se. The following coefficients have been shrunk to zero for both levels of regularization: **PrivateYes, Apps, Accept, Enroll, F.Undergrad, Books, PhD, Terminal, S.F.Ratio, and Expend.**
+
+The fact that the same coefficients are zero for both lambda.min and lambda.1se suggests that these variables may not have a strong relationship with the target variable or that their effect is captured by other variables in the model. The non-zero coefficients are the predictors that the model finds relevant. Positive coefficients indicate a positive relationship with the target variable, and negative coefficients indicate a negative relationship. The predictors with the largest coefficients (outstate) may have the most significant impact on the model's predictions.
+
+------------------------------------------------------------------------
+
+## 10. Determine the performance of the fit model against the training set by calculating the root mean square error (RMSE).
+
+```{r}
+# Making predictions on the training set
+pred_train_lasso_min <- predict(model.min, s = lasso_lambda.min , newx = train_x_scaled)
+
+# Calculating the square root of the mean squared error for lambda.min
+rmse_train_lasso_min <- sqrt(mean((train_y - pred_train_lasso_min)^2))
+
+# Making predictions on the training set for lambda.1se
+pred_train_lasso_1se <- predict(model.1se, s = lasso_lambda.1se , newx = train_x_scaled)
+
+# Calculating the square root of the mean squared error for lambda.1se
+rmse_train_lasso_1se <- sqrt(mean((train_y - pred_train_lasso_1se)^2))
+
+# Create a data frame with RMSE values
+lasso_rmse_values1 <- data.frame(
+  Model = c('Lasso - lambda.min', 'Lasso - lambda.1se'),
+  RMSE = c(rmse_train_lasso_min, rmse_train_lasso_1se)
+)
+
+# Use kable to create a nicely formatted table
+kable(lasso_rmse_values1, caption = "Table 3: Training Set RMSE for Lasso Regression Models") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+------------------------------------------------------------------------
+
+## 11. Determine the performance of the fit model against the test set by calculating the root mean square error (RMSE). Is your model overfit?
+
+```{r}
+# Making predictions on the test set
+pred_test_lasso_min <- predict(model.min, s = lasso_lambda.min , newx = test_x_scaled)
+
+# Calculating the square root of the mean squared error for lambda.min
+rmse_test_lasso_min <- sqrt(mean((test_y - pred_test_lasso_min)^2))
+
+
+# Making predictions on the test set for lambda.1se
+pred_test_lasso_1se <- predict(model.1se, s = lasso_lambda.1se , newx = test_x_scaled)
+
+# Calculating the square root of the mean squared error for lambda.1se
+rmse_test_lasso_1se <- sqrt(mean((test_y - pred_test_lasso_1se)^2))
+
+# Create a data frame with RMSE values
+lasso_rmse_values2 <- data.frame(
+  Model = c('Lasso - lambda.min', 'Lasso - lambda.1se'),
+  RMSE = c(rmse_test_lasso_min, rmse_test_lasso_1se)
+)
+
+# Use kable to create a nicely formatted table
+kable(lasso_rmse_values2, caption = "Table 4: Test Set RMSE for Lasso Regression Models") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+**Interpretation for Table 4:**
+
+The RMSE values are relatively close to each other, with the lambda.min model performing slightly better on the test set than the lambda.1se model.
+
+The fact that the lambda.1se model, which is more regularized and thus less prone to overfitting, has an RMSE that is not substantially higher than the lambda.min model suggests good generalizability. The difference in RMSE between the two models is relatively small (approximately 0.62456), which further implies that the lambda.min model is not overfitting by much, if at all.
+
+**Given that both Lasso models have lower RMSEs on the test set compared to the training set, there is no evidence of overfitting. Instead, the models seem to be well-tuned to generalize to new data.**
+
+------------------------------------------------------------------------
+
+## 12. Which model performed better and why? Is that what you expected?
+
+```{r}
+# Create a data frame with all RMSE values
+comparison <- data.frame(
+  Model = c('Lasso - lambda.min', 'Lasso - lambda.1se', 
+            'Ridge - lambda.min', 'Ridge - lambda.1se'),
+  Train_Dataset = c(rmse_train_lasso_min, rmse_train_lasso_1se,
+                    rmse_train_ridge_min, rmse_train_ridge_1se),
+  Test_Dataset = c(rmse_test_lasso_min, rmse_test_lasso_1se,
+                   rmse_test_ridge_min, rmse_test_ridge_1se)
+)
+
+comparison$Difference <- comparison$Train_Dataset - comparison$Test_Dataset
+  
+  # Use kable to create a nicely formatted table
+kable(comparison, caption = "Table 5: RMSE for Lasso and Ridge Regression Models") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+**Interpretation for Table 5:**
+
+-   **Lasso - lambda.min**: This model has the lowest RMSE on the test dataset (12.04458), indicating the best predictive accuracy among the models listed when applied to unseen data.
+
+-   **Lasso - lambda.1se**: The RMSE on the test dataset (12.66914) is higher than that of Lasso - lambda.min, suggesting less predictive accuracy.
+
+-   **Ridge - lambda.min**: It has a slightly higher RMSE on the test dataset (12.09748) compared to Lasso - lambda.min, but the difference is marginal.
+
+-   **Ridge - lambda.1se**: This model has the smallest difference between training and test RMSE, suggesting it generalizes slightly better than the others. However, since its test RMSE is higher compared to the Lasso - lambda.min, the better generalization does not translate into better predictive performance on the test set.
+
+For both Lasso and Ridge regression, the models with lambda.min have test RMSEs that are very close to their training RMSEs, which suggests that both models are well-tuned to the specific characteristics of the dataset.
+
+**Best Performing Model:**
+
+**The Lasso - lambda.min model performed the best in terms of predictive accuracy on the test set.** The differences in RMSE are not large, which suggests that all models are performing relatively well and that there is no significant overfitting occurring with the less regularized models.
+
+------------------------------------------------------------------------
+
+## 13. Refer to the ALY6015_Feature_Selection_R.pdf document for how to perform stepwise selection and then fit a model. Did this model perform better or as well as Ridge regression or LASSO? Which method do you prefer and why?
+
+```{r}
+# Fit a full model with all predictors for the stepwise selection
+all_predictors <- lm(Grad.Rate ~ ., data = train)
+
+# Perform stepwise selection using both directions (forward and backward)
+step_selection <- step(all_predictors, direction = "both", trace = 0)
+
+#(OpenAI,2024)
+
+# Summary of the stepwise model
+summary(step_selection)
+
+# Make predictions on the test set
+pred_step_select <- predict(step_selection, newdata = test)
+
+# Calculate RMSE for stepwise model
+rmse_stepwise <- sqrt(mean((pred_step_select - test$Grad.Rate) ^ 2))
+rmse_stepwise
+
+# Compare test RMSE values
+rmse_comparison <- data.frame(
+  Model = c("Ridge", "LASSO", "Stepwise"),
+  RMSE = c( rmse_test_ridge_min, rmse_test_lasso_min, rmse_stepwise)
+)
+
+  # Use kable to create a nicely formatted table
+kable(rmse_comparison, caption = "Table 6: RMSE Comparison for all three models") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+**Interpretation for Table 6:**
+
+The Stepwise selection model has the lowest RMSE of the three, indicating it performed slightly better in terms of predictive accuracy on the dataset.
+
+**Model Performance-**
+
+-   [Stepwise Regression]{.underline} provided the best predictive accuracy with the lowest RMSE.
+
+-   [LASSO]{.underline} performed slightly worse than Stepwise but better than Ridge.
+
+-   [Ridge Regression]{.underline} had the highest RMSE, suggesting it was the least accurate among the three for this particular dataset.
+
+**Method Preference**-
+
+Although Stepwise Regression is effective in this context, I would still prefer **LASSO (Least Absolute Shrinkage and Selection Operator)**. As it can be preferred when dealing with datasets that have a large number of predictors because it performs both variable selection and regularization. It tends to produce simpler, more interpretable models, especially useful when the goal is not just prediction but also understanding the influence of different variables.
+
+------------------------------------------------------------------------
+
+## Conclusion
+
+Upon careful analysis and comparison of Ridge and Lasso regression models alongside a Stepwise selection model, it is evident that each method has its merits based on the RMSE scores for both training and test datasets. The Lasso model with lambda.min demonstrated superior predictive accuracy on the test set, highlighting its capability for feature selection and model simplicity. However, the Stepwise model marginally outperformed both Ridge and Lasso in terms of test RMSE, suggesting it was slightly more accurate in predicting the graduation rate for this particular dataset. Despite the effectiveness of Stepwise regression in this context, Lasso remains a preferred method due to its robustness in handling numerous predictors and its inherent feature selection property, which is crucial for interpretability and model simplicity.
+
+------------------------------------------------------------------------
+
+## References
+
+-   *OpenAI. (2021). ChatGPT (Version 3.5). OpenAI.<https://chat.openai.com/>*
+
+-   Frasca. (n.d.). Lab: Regularization Video [Video]. Panopto. Northeastern University
+
+-   Goyal. (2017). In layman's terms, what is lambda for lasso and ridge regression? quora.com. Retrieved February 4, 2024, from <https://www.quora.com/In-laymans-terms-what-is-lambda-for-lasso-and-ridge-regression>
+
+-   Northeastern University. (n.d.). ALY6015 Feature Selection R [PDF file]
