@@ -1,4 +1,4 @@
-Regularization Techniques in Machine Learning
+# Regularization Techniques in Machine Learning
 
 ## Author
 Sanchi Gupta
